@@ -28,10 +28,8 @@ writechannel.queue_declare('db_write', durable=True)
 
 def callback(ch, method, properties, body):
     print " [x] Received %r" % body
-    count = int(body) + 1
-    time.sleep(body.count(b'.'))
     print " [x] Done"
-    writechannel.basic_publish(exchange='', routing_key='db_queue', body=str(count), properties=pika.BasicProperties(
+    writechannel.basic_publish(exchange='', routing_key='db_queue', body=str(body), properties=pika.BasicProperties(
         delivery_mode=2
     ))
     ch.basic_ack(delivery_tag=method.delivery_tag)
