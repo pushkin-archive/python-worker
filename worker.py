@@ -39,10 +39,10 @@ def callback(ch, method, properties, body):
     print " [x] Done"
     j = json.loads(body)
     print j['questionId']
-    newId = j['questionId'] + 1
+    newId = j['questionId'] + 2
     rpc = {
         'method': 'findQuestion',
-        'arguments': [newId]
+        'arguments': [newId, ['choices']]
     }
     message = json.dumps(rpc)
     routing_key = 'db_rpc_worker'
