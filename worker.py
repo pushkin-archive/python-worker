@@ -4,18 +4,16 @@ import os
 import pika
 import json
 import atexit
+from classes.RPCClient import RPCClient
 
-print "worker"
 
+client = RPCClient()
 
 rabbitlink =  os.environ['AMPQ_ADDRESS']
 
 
 parameters = pika.URLParameters(rabbitlink)
 
-print rabbitlink
-print "PARAMS"
-print parameters
 
 # CONNECTION = pika.BlockingConnection(pika.ConnectionParameters(host=os.environ['AMPQ_ADDRESS']))
 connection = pika.BlockingConnection(parameters)
@@ -34,11 +32,29 @@ def callback(ch, method, properties, body):
     # in this scope, we have access to the user id, the question id, and the users choice
     # but it makes sure that it passes the correlation_id(if any) to the db worker, as well as the reply_to
     # this insures that the data can be returned on the original channel and the api can respond.
-
     print " [x] Received %r" % body
     print " [x] Done"
     j = json.loads(body)
+    user_id = j['userId']
+    question_id = j['questionId']
+    choice_id = j['choiceId']
+    user =  client.call(json.dumps({ 
+        'method': 'findUser',
+        'arguments': [6]
+    }))
+    question =  client.call(json.dumps({ 
+        'method': 'findQuestion',
+        'arguments': [2]
+    }))
+    choice =  client.call(json.dumps({ 
+        'method': 'findChoice',
+        'arguments': [3]
+    }))
+
     print j['questionId']
+    print "USER: %r" % user
+    print "QUESTION: %r" % question
+    print "CHOICE: %r" % choice
     newId = j['questionId'] + 2
     rpc = {
         'method': 'findQuestion',
