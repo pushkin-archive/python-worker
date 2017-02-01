@@ -33,51 +33,90 @@ def callback(ch, method, properties, body):
     # but it makes sure that it passes the correlation_id(if any) to the db worker, as well as the reply_to
     # this insures that the data can be returned on the original channel and the api can respond.
     print " [x] Received %r" % body
-    print " [x] Done"
     j = json.loads(body)
-    user_id = j['userId']
-    question_id = j['questionId']
-    choice_id = j['choiceId']
-    user =  client.call(json.dumps({ 
-        'method': 'findUser',
-        'arguments': [6]
-    }))
-    question =  client.call(json.dumps({ 
-        'method': 'findQuestion',
-        'arguments': [2]
-    }))
-    choice =  client.call(json.dumps({ 
-        'method': 'findChoice',
-        'arguments': [3]
-    }))
+    rpcmethod = j['method']
+    payload = j['payload']
+    print " METHOD %r" % rpcmethod
+    print " PAYLOAD %r" % payload
+    if rpcmethod == 'getQuestion':
+        # Pretty self explanatory,
+        # get a user, the question they just answered, and their choice
+        user_id = payload['userId']
+        question_id = payload['questionId']
+        choice_id = payload['choiceId']
+        user = client.call(json.dumps({
+            'method': 'findUser',
+            'arguments': [user_id]
+        }))
+        question = client.call(json.dumps({
+            'method': 'findQuestion',
+            'arguments': [question_id]
+        }))
+        choice = client.call(json.dumps({
+            'method': 'findChoice',
+            'arguments': [choice_id]
+        }))
+        print "USER: %r" % user
+        print "QUESTION: %r" % question
+        print "CHOICE: %r" % choice
+        newId = question_id + 2
+        rpc = {
+            'method': 'findQuestion',
+            'arguments': [newId, ['choices']]
+        }
+        message = json.dumps(rpc)
+        routing_key = 'db_rpc_worker'
+        correlation_id = properties.correlation_id
+        reply_to = properties.reply_to
 
-    print j['questionId']
-    print "USER: %r" % user
-    print "QUESTION: %r" % question
-    print "CHOICE: %r" % choice
-    newId = j['questionId'] + 2
-    rpc = {
-        'method': 'findQuestion',
-        'arguments': [newId, ['choices']]
-    }
-    message = json.dumps(rpc)
-    routing_key = 'db_rpc_worker'
-    correlation_id = properties.correlation_id
-    reply_to = properties.reply_to
+        # key here is we pass this off to the db worker, and it replies to the original channel with the original correlation_id
 
-    writechannel.basic_publish(exchange='', routing_key=routing_key, body=message, properties=pika.BasicProperties(
-        delivery_mode=2,
-        correlation_id=correlation_id,
-        reply_to=reply_to
-    ))
-    ch.basic_ack(delivery_tag=method.delivery_tag)
+        writechannel.basic_publish(
+            exchange='',
+            routing_key=routing_key,
+            body=message,
+            properties=pika.BasicProperties(
+                delivery_mode=2,
+                correlation_id=correlation_id,
+                reply_to=reply_to
+            )
+        )
+        ch.basic_ack(delivery_tag=method.delivery_tag)
+    if rpcmethod == 'getResults':
+        # this method is called when a user needs to get results,
+        # feel free to make other rpc calls in here 
+        # and any data analysis that is needed
+        rpcInput = {
+            'method': 'getResults',
+            'arguments': [
+                payload['userId']
+            ]
+        }
+        user_id = payload['userId']
+        routing_key = 'db_rpc_worker'
+        results = client.call(json.dumps(rpcInput))
+        correlation_id = properties.correlation_id
+        reply_to = properties.reply_to
+        body = results
+        reply_to = properties.reply_to
+        print "PUBLISHING TO CHANNEL %r" % body
+        channel.basic_publish(
+            exchange='',
+            routing_key=properties.reply_to,
+            body=body,
+            properties=pika.BasicProperties(
+                correlation_id=correlation_id,
+            )
+        )
+        ch.basic_ack(delivery_tag=method.delivery_tag)
 
 # channel.basic_qos(prefetch_count=1)
 channel.basic_consume(callback,
                       queue='task_queue')
 
 def exit_handler():
-    channel.close();
+    channel.close()
+    writechannel.close()
 print ' [*] Waiting for messages. To exit press CTRL+C'
 
 atexit.register(exit_handler)
