@@ -22,6 +22,7 @@ class RPCClient(object):
         if self.corr_id == props.correlation_id:
             self.response = body
     def call(self, body):
+        print "rpc called with %r" % body
         """ Passed a json object into rabbit as an RPC"""
         self.response = None
         self.corr_id = str(uuid.uuid4())

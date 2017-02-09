@@ -28,7 +28,7 @@ writechannel = connection.channel()
 writechannel.queue_declare('db_write', durable=True)
 
 def callback(ch, method, properties, body):
-    # the key part of this code here is that the python worker can do anything it needs within this timelimit and could also start additional long tasks
+    # the key part of this code here is that the python worker can do anything it needs 
     # in this scope, we have access to the user id, the question id, and the users choice
     # but it makes sure that it passes the correlation_id(if any) to the db worker, as well as the reply_to
     # this insures that the data can be returned on the original channel and the api can respond.
@@ -39,49 +39,60 @@ def callback(ch, method, properties, body):
     print " METHOD %r" % rpcmethod
     print " PAYLOAD %r" % payload
     if rpcmethod == 'getQuestion':
-        # Pretty self explanatory,
-        # get a user, the question they just answered, and their choice
-        user_id = payload['userId']
-        question_id = payload['questionId']
-        choice_id = payload['choiceId']
-        user = client.call(json.dumps({
-            'method': 'findUser',
-            'arguments': [user_id]
-        }))
-        question = client.call(json.dumps({
-            'method': 'findQuestion',
-            'arguments': [question_id]
-        }))
-        choice = client.call(json.dumps({
-            'method': 'findChoice',
-            'arguments': [choice_id]
-        }))
-        print "USER: %r" % user
-        print "QUESTION: %r" % question
-        print "CHOICE: %r" % choice
-        newId = question_id + 2
-        rpc = {
-            'method': 'findQuestion',
-            'arguments': [newId, ['choices']]
-        }
-        message = json.dumps(rpc)
-        routing_key = 'db_rpc_worker'
-        correlation_id = properties.correlation_id
-        reply_to = properties.reply_to
+        if 'questionId' in payload:
+            question_id = payload['questionId']
+            print "Finding question with %r" % question_id
+            question = client.call(json.dumps({
+                'method': 'findQuestion',
+                'arguments': [question_id]
+            }))
+            print "QUESTION: %r" % question
+            # Pretty self explanatory,
+            # get a user, the question they just answered, and their choice
+            if 'userId' in payload:
+                user_id = payload['userId']
+                print "Finding user with %r" % user_id
+                user = client.call(json.dumps({
+                    'method': 'findUser',
+                    'arguments': [user_id]
+                }))
+                print "USER: %r" % user
+            if 'choiceId' in payload:
+                choice_id = payload['choiceId']
+                print "Finding choice with %r" % choice_id
+                choice = client.call(json.dumps({
+                    'method': 'findChoice',
+                    'arguments': [choice_id]
+                }))
+                print "CHOICE: %r" % choice
 
-        # key here is we pass this off to the db worker, and it replies to the original channel with the original correlation_id
+            new_id = question_id + 2
+            rpc = {
+                'method': 'findQuestion',
+                'arguments': [new_id, ['choices']]
+            }
+            message = json.dumps(rpc)
+            routing_key = 'db_rpc_worker'
+            correlation_id = properties.correlation_id
+            reply_to = properties.reply_to
 
-        writechannel.basic_publish(
-            exchange='',
-            routing_key=routing_key,
-            body=message,
-            properties=pika.BasicProperties(
-                delivery_mode=2,
-                correlation_id=correlation_id,
-                reply_to=reply_to
+            # key here is we pass this off to the db worker
+            # it replies to the original channel with the original correlation_id
+
+            writechannel.basic_publish(
+                exchange='',
+                routing_key=routing_key,
+                body=message,
+                properties=pika.BasicProperties(
+                    delivery_mode=2,
+                    correlation_id=correlation_id,
+                    reply_to=reply_to
+                )
             )
-        )
-        ch.basic_ack(delivery_tag=method.delivery_tag)
+            ch.basic_ack(delivery_tag=method.delivery_tag)
+        else:
+            print "Cannot get next question without at least the questionId"
+            ch.basic_ack(delivery_tag=method.delivery_tag)
     if rpcmethod == 'getResults':
         # this method is called when a user needs to get results,
         # feel free to make other rpc calls in here 
