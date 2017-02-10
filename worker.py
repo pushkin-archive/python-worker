@@ -23,9 +23,8 @@ channel = connection.channel()
 
 channel.queue_declare(queue='task_queue', durable=True)
 
-writechannel = connection.channel()
 
-writechannel.queue_declare('db_write', durable=True)
+channel.queue_declare('db_write', durable=True)
 
 def callback(ch, method, properties, body):
     # the key part of this code here is that the python worker can do anything it needs 
@@ -42,29 +41,29 @@ def callback(ch, method, properties, body):
         if 'questionId' in payload:
             question_id = payload['questionId']
             print "Finding question with %r" % question_id
-            question = client.call(json.dumps({
-                'method': 'findQuestion',
-                'arguments': [question_id]
-            }))
-            print "QUESTION: %r" % question
-            # Pretty self explanatory,
-            # get a user, the question they just answered, and their choice
-            if 'userId' in payload:
-                user_id = payload['userId']
-                print "Finding user with %r" % user_id
-                user = client.call(json.dumps({
-                    'method': 'findUser',
-                    'arguments': [user_id]
-                }))
-                print "USER: %r" % user
-            if 'choiceId' in payload:
-                choice_id = payload['choiceId']
-                print "Finding choice with %r" % choice_id
-                choice = client.call(json.dumps({
-                    'method': 'findChoice',
-                    'arguments': [choice_id]
-                }))
-                print "CHOICE: %r" % choice
+            # question = client.call(json.dumps({
+            #     'method': 'findQuestion',
+            #     'arguments': [question_id]
+            # }))
+            # print "QUESTION: %r" % question
+            # # Pretty self explanatory,
+            # # get a user, the question they just answered, and their choice
+            # if 'userId' in payload:
+            #     user_id = payload['userId']
+            #     print "Finding user with %r" % user_id
+            #     user = client.call(json.dumps({
+            #         'method': 'findUser',
+            #         'arguments': [user_id]
+            #     }))
+            #     print "USER: %r" % user
+            # if 'choiceId' in payload:
+            #     choice_id = payload['choiceId']
+            #     print "Finding choice with %r" % choice_id
+            #     choice = client.call(json.dumps({
+            #         'method': 'findChoice',
+            #         'arguments': [choice_id]
+            #     }))
+            #     print "CHOICE: %r" % choice
 
             new_id = question_id + 2
             rpc = {
@@ -79,7 +78,7 @@ def callback(ch, method, properties, body):
             # key here is we pass this off to the db worker
             # it replies to the original channel with the original correlation_id
 
-            writechannel.basic_publish(
+            channel.basic_publish(
                 exchange='',
                 routing_key=routing_key,
                 body=message,
@@ -127,7 +126,6 @@ channel.basic_consume(callback,
 
 def exit_handler():
     channel.close()
-    writechannel.close()
 print ' [*] Waiting for messages. To exit press CTRL+C'
 
 atexit.register(exit_handler)
