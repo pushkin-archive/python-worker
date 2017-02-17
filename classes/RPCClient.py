@@ -11,7 +11,7 @@ class RPCClient(object):
         parameters = pika.URLParameters(RABBITLINK)
         self.connection = pika.BlockingConnection(parameters)
         self.channel = self.connection.channel()
-        result = self.channel.queue_declare(exclusive=True)
+        result = self.channel.queue_declare(exclusive=True, auto_delete=True)
         self.callback_queue = result.method.queue
         self.channel.basic_consume(self.on_response, no_ack=True, queue=self.callback_queue)
         self.response = None
@@ -21,12 +21,14 @@ class RPCClient(object):
         """ Handles the response from the RPC """
         if self.corr_id == props.correlation_id:
             self.response = body
-            self.channel.close();
+            # self.channel.close();
     def call(self, body):
         print "rpc called with %r" % body
         """ Passed a json object into rabbit as an RPC"""
         self.response = None
         self.corr_id = str(uuid.uuid4())
+        print "Publishing to channel"
+        print self.callback_queue
         self.channel.basic_publish(
             exchange='',
             routing_key='db_rpc_worker',

@@ -125,7 +125,8 @@ channel.basic_consume(callback,
                       queue='task_queue')
 
 def exit_handler():
-    channel.close()
+    if channel.is_open:
+        channel.close()
 print ' [*] Waiting for messages. To exit press CTRL+C'
 
 atexit.register(exit_handler)
