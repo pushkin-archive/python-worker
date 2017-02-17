@@ -30,7 +30,7 @@ def callback(ch, method, properties, body):
     # the key part of this code here is that the python worker can do anything it needs 
     # in this scope, we have access to the user id, the question id, and the users choice
     # but it makes sure that it passes the correlation_id(if any) to the db worker, as well as the reply_to
-    # this insures that the data can be returned on the original channel and the api can respond.
+    # this ensures that the data can be returned on the original channel and the api can respond.
     print " [x] Received %r" % body
     j = json.loads(body)
     rpcmethod = j['method']

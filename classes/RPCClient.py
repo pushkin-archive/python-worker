@@ -21,7 +21,7 @@ class RPCClient(object):
         """ Handles the response from the RPC """
         if self.corr_id == props.correlation_id:
             self.response = body
-            self.channel.close();
+            # self.channel.close()
     def call(self, body):
         print "rpc called with %r" % body
         """ Passed a json object into rabbit as an RPC"""
