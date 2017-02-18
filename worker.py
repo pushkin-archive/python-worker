@@ -24,7 +24,7 @@ channel = connection.channel()
 channel.queue_declare(queue='task_queue', durable=True)
 
 
-channel.queue_declare('db_write', durable=True)
+channel.queue_declare(queue='db_write', durable=True)
 
 def callback(ch, method, properties, body):
     # the key part of this code here is that the python worker can do anything it needs 
