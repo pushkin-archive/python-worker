@@ -116,11 +116,13 @@ def callback(ch, method, properties, body):
             body=body,
             properties=pika.BasicProperties(
                 correlation_id=correlation_id,
+                reply_to=reply_to
             )
         )
         ch.basic_ack(delivery_tag=method.delivery_tag)
 
-# channel.basic_qos(prefetch_count=1)
+
+channel.basic_qos(prefetch_count=1)
 channel.basic_consume(callback,
                       queue='task_queue')
 
