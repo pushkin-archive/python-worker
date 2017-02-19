@@ -14,19 +14,17 @@ class RPCClient(object):
         result = self.channel.queue_declare(exclusive=True)
         self.callback_queue = result.method.queue
         self.channel.basic_consume(self.on_response, no_ack=True, queue=self.callback_queue)
-        self.response = None
-        self.corr_id = None
-
     def on_response(self, ch, method, props, body):
         """ Handles the response from the RPC """
         if self.corr_id == props.correlation_id:
             self.response = body
-            # self.channel.close()
     def call(self, body):
         print "rpc called with %r" % body
         """ Passed a json object into rabbit as an RPC"""
         self.response = None
         self.corr_id = str(uuid.uuid4())
+        print "Publishing to channel"
+        print self.callback_queue
         self.channel.basic_publish(
             exchange='',
             routing_key='db_rpc_worker',

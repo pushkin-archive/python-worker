@@ -24,7 +24,7 @@ channel = connection.channel()
 channel.queue_declare(queue='task_queue', durable=True)
 
 
-channel.queue_declare('db_write', durable=True)
+channel.queue_declare(queue='db_write', durable=True)
 
 def callback(ch, method, properties, body):
     # the key part of this code here is that the python worker can do anything it needs 
@@ -125,7 +125,8 @@ channel.basic_consume(callback,
                       queue='task_queue')
 
 def exit_handler():
-    channel.close()
+    if channel.is_open:
+        channel.close()
 print ' [*] Waiting for messages. To exit press CTRL+C'
 
 atexit.register(exit_handler)
