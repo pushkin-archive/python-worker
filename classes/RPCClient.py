@@ -8,7 +8,9 @@ class RPCClient(object):
     """This class handles a simple rpc call """
     def __init__(self):
 
+        print "creating a channel"
         parameters = pika.URLParameters(RABBITLINK)
+        parameters.heartbeat = 0
         self.connection = pika.BlockingConnection(parameters)
         self.channel = self.connection.channel()
         result = self.channel.queue_declare(exclusive=True)
@@ -17,6 +19,7 @@ class RPCClient(object):
     def on_response(self, ch, method, props, body):
         """ Handles the response from the RPC """
         if self.corr_id == props.correlation_id:
+            print "received response from rpc"
             self.response = body
     def call(self, body):
         print "rpc called with %r" % body
