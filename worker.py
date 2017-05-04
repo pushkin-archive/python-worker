@@ -13,6 +13,7 @@ RABBIT_LINK = os.environ.get('AMPQ_ADDRESS')
 
 
 parameters = pika.URLParameters(RABBIT_LINK)
+parameters.heartbeat = 0
 
 
 # CONNECTION = pika.BlockingConnection(pika.ConnectionParameters(host=os.environ['AMPQ_ADDRESS']))
@@ -92,6 +93,7 @@ def callback(ch, method, properties, body):
                 )
             )
             ch.basic_ack(delivery_tag=method.delivery_tag)
+            return 1
         else:
             print "Cannot get next question without at least the questionId"
             ch.basic_ack(delivery_tag=method.delivery_tag)
@@ -118,13 +120,13 @@ def callback(ch, method, properties, body):
             body=body,
             properties=pika.BasicProperties(
                 correlation_id=correlation_id,
-                reply_to=reply_to
             )
         )
         ch.basic_ack(delivery_tag=method.delivery_tag)
     else:
         print "Couldnt find a delivery mechanism for %r" % parameters
         ch.basic_ack(delivery_tag=method.delivery_tag)
+        return 1
 
 
 channel.basic_qos(prefetch_count=1)
@@ -137,5 +139,5 @@ def exit_handler():
         channel.close()
 print ' [*] Waiting for messages. To exit press CTRL+C'
 
-atexit.register(exit_handler)
+# atexit.register(exit_handler)
 channel.start_consuming()
