@@ -1,18 +1,18 @@
 #!/usr/bin/env python
-import time
 import os
-import pika
 import json
 import atexit
+import uuid
+import pika
 from classes.RPCClient import RPCClient
 
 
 client = RPCClient()
 
-rabbitlink =  os.environ['AMPQ_ADDRESS']
+RABBIT_LINK = os.environ.get('AMPQ_ADDRESS')
 
 
-parameters = pika.URLParameters(rabbitlink)
+parameters = pika.URLParameters(RABBIT_LINK)
 parameters.heartbeat = 0
 
 
@@ -28,48 +28,50 @@ channel.queue_declare(queue='task_queue', durable=True)
 channel.queue_declare(queue='db_write', durable=True)
 
 def callback(ch, method, properties, body):
-    # the key part of this code here is that the python worker can do anything it needs 
+    # the key part of this code here is that the python worker can do anything it needs
     # in this scope, we have access to the user id, the question id, and the users choice
     # but it makes sure that it passes the correlation_id(if any) to the db worker, as well as the reply_to
-    # this ensures that the data can be returned on the original channel and the api can respond.
+    # this ensures that the data can be returned on the original channel and
+    # the api can respond.
     print " [x] Received %r" % body
     j = json.loads(body)
     rpcmethod = j['method']
-    payload = j['payload']
+    params = j['params']
     print " METHOD %r" % rpcmethod
-    print " PAYLOAD %r" % payload
+    print " params %r" % params
     if rpcmethod == 'getQuestion':
-        if 'questionId' in payload:
-            question_id = payload['questionId']
+        if 'questionId' in params:
+            question_id = params['questionId']
             print "Finding question with %r" % question_id
             # question = client.call(json.dumps({
             #     'method': 'findQuestion',
-            #     'arguments': [question_id]
+            #     'params': [question_id]
             # }))
             # print "QUESTION: %r" % question
             # # Pretty self explanatory,
             # # get a user, the question they just answered, and their choice
-            # if 'userId' in payload:
-            #     user_id = payload['userId']
+            # if 'userId' in params:
+            #     user_id = params['userId']
             #     print "Finding user with %r" % user_id
             #     user = client.call(json.dumps({
             #         'method': 'findUser',
-            #         'arguments': [user_id]
+            #         'params': [user_id]
             #     }))
             #     print "USER: %r" % user
-            # if 'choiceId' in payload:
-            #     choice_id = payload['choiceId']
+            # if 'choiceId' in params:
+            #     choice_id = params['choiceId']
             #     print "Finding choice with %r" % choice_id
             #     choice = client.call(json.dumps({
             #         'method': 'findChoice',
-            #         'arguments': [choice_id]
+            #         'params': [choice_id]
             #     }))
             #     print "CHOICE: %r" % choice
 
             new_id = question_id + 2
             rpc = {
                 'method': 'findQuestion',
-                'arguments': [new_id, ['choices']]
+                'params': [new_id, ['choices']],
+                'id': uuid.uuid1()
             }
             message = json.dumps(rpc)
             routing_key = 'db_rpc_worker'
@@ -77,7 +79,8 @@ def callback(ch, method, properties, body):
             reply_to = properties.reply_to
 
             # key here is we pass this off to the db worker
-            # it replies to the original channel with the original correlation_id
+            # it replies to the original channel with the original
+            # correlation_id
 
             channel.basic_publish(
                 exchange='',
@@ -94,19 +97,18 @@ def callback(ch, method, properties, body):
         else:
             print "Cannot get next question without at least the questionId"
             ch.basic_ack(delivery_tag=method.delivery_tag)
-    if rpcmethod == 'getResults':
+    elif rpcmethod == 'getResults':
         # this method is called when a user needs to get results,
-        # feel free to make other rpc calls in here 
+        # feel free to make other rpc calls in here
         # and any data analysis that is needed
-        rpcInput = {
+        rpc_input = {
             'method': 'getResults',
-            'arguments': [
-                payload['userId']
-            ]
+            'params': [
+                params['userId']
+            ],
         }
-        user_id = payload['userId']
         routing_key = 'db_rpc_worker'
-        results = client.call(json.dumps(rpcInput))
+        results = client.call(json.dumps(rpc_input))
         correlation_id = properties.correlation_id
         reply_to = properties.reply_to
         body = results
@@ -121,14 +123,16 @@ def callback(ch, method, properties, body):
             )
         )
         ch.basic_ack(delivery_tag=method.delivery_tag)
-        return 1
     else:
+        print "Couldnt find a delivery mechanism for %r" % parameters
+        ch.basic_ack(delivery_tag=method.delivery_tag)
         return 1
 
 
 channel.basic_qos(prefetch_count=1)
 channel.basic_consume(callback,
                       queue='task_queue')
+
 
 def exit_handler():
     if channel.is_open:
@@ -137,4 +141,3 @@ print ' [*] Waiting for messages. To exit press CTRL+C'
 
 # atexit.register(exit_handler)
 channel.start_consuming()
-
