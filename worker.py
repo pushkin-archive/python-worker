@@ -1,117 +1,155 @@
 #!/usr/bin/env python
-import time
 import os
-import pika
 import json
 import atexit
-from classes.RPCClient import RPCClient
+import uuid
+import pika
+from rpc.RPCClient import RPCClient
+from rpc.RPC import RPC
 
 
-client = RPCClient()
-
-rabbitlink =  os.environ['AMPQ_ADDRESS']
 
 
-parameters = pika.URLParameters(rabbitlink)
+try:
+    RABBIT_LINK = os.environ.get('AMPQ_ADDRESS')
+    PREFIX = os.environ.get('QUEUE')
+except BaseException as error:
+    print error
+    print "Couldnt find AMPQ_ADDRESS in environment"
+
+
+parameters = pika.URLParameters(RABBIT_LINK)
 parameters.heartbeat = 0
 
 
-# CONNECTION = pika.BlockingConnection(pika.ConnectionParameters(host=os.environ['AMPQ_ADDRESS']))
+
 connection = pika.BlockingConnection(parameters)
-print "created connection"
+# print "created connection"
 
 channel = connection.channel()
+RPC_QUEUE = PREFIX + '_rpc_worker'
 
-channel.queue_declare(queue='task_queue', durable=True)
+TASK_QUEUE = PREFIX + "_task_queue"
+DB_WRITE_QUEUE = PREFIX + "_db_write"
+DURABLE = False
+
+print " declaring queue %s durable: %s" % (TASK_QUEUE, DURABLE)
+channel.queue_declare(queue=TASK_QUEUE, durable=DURABLE)
 
 
-channel.queue_declare(queue='db_write', durable=True)
+print " declaring queue %s durable: %s" % (DB_WRITE_QUEUE, DURABLE)
+
+channel.queue_declare(queue=DB_WRITE_QUEUE, durable=DURABLE)
+
+
+
 
 def callback(ch, method, properties, body):
-    # the key part of this code here is that the python worker can do anything it needs 
+    client = RPCClient(connection, RPC_QUEUE)
+    rpc = RPC()
+    # the key part of this code here is that the python worker can do anything it needs
     # in this scope, we have access to the user id, the question id, and the users choice
     # but it makes sure that it passes the correlation_id(if any) to the db worker, as well as the reply_to
-    # this ensures that the data can be returned on the original channel and the api can respond.
+    # this ensures that the data can be returned on the original channel and
+    # the api can respond.
     print " [x] Received %r" % body
-    j = json.loads(body)
-    rpcmethod = j['method']
-    payload = j['payload']
-    print " METHOD %r" % rpcmethod
-    print " PAYLOAD %r" % payload
-    if rpcmethod == 'getQuestion':
-        if 'questionId' in payload:
-            question_id = payload['questionId']
+    try:
+        rpc.parse(body)
+    except ValueError as error:
+        print "message was not a valid json structure message was %r" % body
+        return
+    except KeyError as error:
+        print "message was not a valid JSON-RPC with the keys, 'method' and 'params'"
+        return
+
+    # print " METHOD %r" % rpc.method
+    # print " params %r" % rpc.params
+    # print "properties %r" % properties
+    if rpc.method == 'getQuestion':
+        if 'questionId' in rpc.params:
+            question_id = rpc.params['questionId']
             print "Finding question with %r" % question_id
             # question = client.call(json.dumps({
             #     'method': 'findQuestion',
-            #     'arguments': [question_id]
+            #     'params': [question_id]
             # }))
             # print "QUESTION: %r" % question
             # # Pretty self explanatory,
             # # get a user, the question they just answered, and their choice
-            # if 'userId' in payload:
-            #     user_id = payload['userId']
+            # if 'userId' in params:
+            #     user_id = params['userId']
             #     print "Finding user with %r" % user_id
             #     user = client.call(json.dumps({
             #         'method': 'findUser',
-            #         'arguments': [user_id]
+            #         'params': [user_id]
             #     }))
             #     print "USER: %r" % user
-            # if 'choiceId' in payload:
-            #     choice_id = payload['choiceId']
+            # if 'choiceId' in params:
+            #     choice_id = params['choiceId']
             #     print "Finding choice with %r" % choice_id
             #     choice = client.call(json.dumps({
             #         'method': 'findChoice',
-            #         'arguments': [choice_id]
+            #         'params': [choice_id]
             #     }))
             #     print "CHOICE: %r" % choice
 
             new_id = question_id + 2
-            rpc = {
-                'method': 'findQuestion',
-                'arguments': [new_id, ['choices']]
-            }
-            message = json.dumps(rpc)
+            send_rpc = RPC()
+            send_rpc.method = 'findQuestion'
+            send_rpc.params = [new_id, ['choices']]
             routing_key = 'db_rpc_worker'
             correlation_id = properties.correlation_id
             reply_to = properties.reply_to
 
+            print send_rpc
+            print send_rpc.to_JSON()
             # key here is we pass this off to the db worker
-            # it replies to the original channel with the original correlation_id
-
-            channel.basic_publish(
-                exchange='',
-                routing_key=routing_key,
-                body=message,
-                properties=pika.BasicProperties(
-                    delivery_mode=2,
-                    correlation_id=correlation_id,
-                    reply_to=reply_to
+            # it replies to the original channel with the original
+            # correlation_id
+            try:
+                channel.basic_publish(
+                    exchange='',
+                    routing_key=routing_key,
+                    body=rpc.to_JSON(),
+                    properties=pika.BasicProperties(
+                        delivery_mode=2,
+                        correlation_id=correlation_id,
+                        reply_to=reply_to
+                    )
                 )
-            )
-            ch.basic_ack(delivery_tag=method.delivery_tag)
-            return 1
+                ch.basic_ack(delivery_tag=method.delivery_tag)
+                return 1
+            except BaseException as error:
+                print "Couldnt publish"
         else:
             print "Cannot get next question without at least the questionId"
             ch.basic_ack(delivery_tag=method.delivery_tag)
-    if rpcmethod == 'getResults':
+    elif rpc.method == 'getResults':
         # this method is called when a user needs to get results,
-        # feel free to make other rpc calls in here 
+        # feel free to make other rpc calls in here
         # and any data analysis that is needed
-        rpcInput = {
+        rpc_input = {
             'method': 'getResults',
-            'arguments': [
-                payload['userId']
-            ]
+            'params': [
+                rpc.params['userId']
+            ],
         }
-        user_id = payload['userId']
-        routing_key = 'db_rpc_worker'
-        results = client.call(json.dumps(rpcInput))
+        send_rpc = RPC()
+        send_rpc.method = 'getResults'
+        send_rpc.params = [rpc.params['userId']]
+        routing_key = PREFIX + '_rpc_worker'
+        # The results of an anonymous rpc call along the ROUTING_key _rpc_worker
+        results = client.call(send_rpc.to_JSON())
+
         correlation_id = properties.correlation_id
         reply_to = properties.reply_to
         body = results
         reply_to = properties.reply_to
         print "PUBLISHING TO CHANNEL %r" % body
+        print results
+        print reply_to
+        print "Routing Key %s" % routing_key
+        print properties
         channel.basic_publish(
             exchange='',
             routing_key=properties.reply_to,
@@ -123,18 +161,20 @@ def callback(ch, method, properties, body):
         ch.basic_ack(delivery_tag=method.delivery_tag)
         return 1
     else:
+        print "Couldnt find a delivery mechanism for %r" % parameters
         return 1
-
 
 channel.basic_qos(prefetch_count=1)
 channel.basic_consume(callback,
-                      queue='task_queue')
+                      queue=TASK_QUEUE)
+
 
 def exit_handler():
     if channel.is_open:
         channel.close()
 print ' [*] Waiting for messages. To exit press CTRL+C'
+print ' [*] %s' % TASK_QUEUE
+print ' [*] %s' % DB_WRITE_QUEUE
 
 # atexit.register(exit_handler)
 channel.start_consuming()
-

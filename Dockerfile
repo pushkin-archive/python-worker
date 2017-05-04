@@ -1,6 +1,5 @@
 FROM stackbrew/debian:jessie
 MAINTAINER Robert Wilkinson
-LABEL Name=games-with-words-worker Version=0.0.1 
 RUN apt-get update
 RUN apt-get install -qy netcat
 RUN apt-get install -qy python
