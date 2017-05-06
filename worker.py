@@ -1,8 +1,5 @@
 #!/usr/bin/env python
 import os
-import json
-import atexit
-import uuid
 import pika
 from rpc.RPCClient import RPCClient
 from rpc.RPC import RPC
@@ -128,12 +125,6 @@ def callback(ch, method, properties, body):
         # this method is called when a user needs to get results,
         # feel free to make other rpc calls in here
         # and any data analysis that is needed
-        rpc_input = {
-            'method': 'getResults',
-            'params': [
-                rpc.params['userId']
-            ],
-        }
         send_rpc = RPC()
         send_rpc.method = 'getResults'
         send_rpc.params = [rpc.params['userId']]
