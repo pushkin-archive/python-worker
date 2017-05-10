@@ -5,8 +5,6 @@ from rpc.RPCClient import RPCClient
 from rpc.RPC import RPC
 
 
-
-
 try:
     RABBIT_LINK = os.environ.get('AMPQ_ADDRESS')
     PREFIX = os.environ.get('QUEUE')
@@ -17,7 +15,6 @@ except BaseException as error:
 
 parameters = pika.URLParameters(RABBIT_LINK)
 parameters.heartbeat = 0
-
 
 
 connection = pika.BlockingConnection(parameters)
@@ -37,8 +34,6 @@ channel.queue_declare(queue=TASK_QUEUE, durable=DURABLE)
 print " declaring queue %s durable: %s" % (DB_WRITE_QUEUE, DURABLE)
 
 channel.queue_declare(queue=DB_WRITE_QUEUE, durable=DURABLE)
-
-
 
 
 def callback(ch, method, properties, body):
@@ -121,6 +116,27 @@ def callback(ch, method, properties, body):
         else:
             print "Cannot get next question without at least the questionId"
             ch.basic_ack(delivery_tag=method.delivery_tag)
+    elif rpc.method == 'getInitialQuestions':
+        send_rpc = RPC()
+        send_rpc.method = 'getInitialQuestions'
+        send_rpc.params = []
+        routing_key = PREFIX + '_rpc_worker'
+        results = client.call(send_rpc.to_JSON())
+        correlation_id = properties.correlation_id
+        reply_to = properties.reply_to
+        body = results
+        reply_to = properties.reply_to
+        channel.basic_publish(
+            exchange='',
+            routing_key=properties.reply_to,
+            body=body,
+            properties=pika.BasicProperties(
+                correlation_id=correlation_id,
+            )
+        )
+        ch.basic_ack(delivery_tag=method.delivery_tag)
+        return 1
+
     elif rpc.method == 'getResults':
         # this method is called when a user needs to get results,
         # feel free to make other rpc calls in here
@@ -129,7 +145,8 @@ def callback(ch, method, properties, body):
         send_rpc.method = 'getResults'
         send_rpc.params = [rpc.params['userId']]
         routing_key = PREFIX + '_rpc_worker'
-        # The results of an anonymous rpc call along the ROUTING_key _rpc_worker
+        # The results of an anonymous rpc call along the ROUTING_key
+        # _rpc_worker
         results = client.call(send_rpc.to_JSON())
 
         correlation_id = properties.correlation_id
