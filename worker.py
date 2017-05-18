@@ -89,24 +89,22 @@ def callback(ch, method, properties, body):
             send_rpc = RPC()
             send_rpc.method = 'findQuestion'
             send_rpc.params = [new_id, ['choices']]
-            routing_key = 'db_rpc_worker'
+            routing_key = PREFIX + '_rpc_worker'
+            result = client.call(send_rpc.to_JSON())
             correlation_id = properties.correlation_id
             reply_to = properties.reply_to
 
-            print send_rpc
-            print send_rpc.to_JSON()
             # key here is we pass this off to the db worker
             # it replies to the original channel with the original
             # correlation_id
             try:
                 channel.basic_publish(
                     exchange='',
-                    routing_key=routing_key,
-                    body=rpc.to_JSON(),
+                    routing_key=properties.reply_to,
+                    body=result,
                     properties=pika.BasicProperties(
                         delivery_mode=2,
                         correlation_id=correlation_id,
-                        reply_to=reply_to
                     )
                 )
                 ch.basic_ack(delivery_tag=method.delivery_tag)
