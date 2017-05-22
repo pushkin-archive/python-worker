@@ -29,6 +29,13 @@ the key difference between calculating results and searching for the next questi
 When you ask for the next question, the worker calculates the next question, then tells **the db worker** to read it and pass it to the **api**
 when you ask for the results, the worker calculates the results and **the worker** passes them to the api
 
+# How does it work
+When generating a new worker by `pushkin generate worker [yourQuizName]`, it is : 
+- added to the docker compose file
+- each worker listens to task ques prefixed by [yourQuizName]
+
+# How to modify
+New worker files generated could be found in `pushkin` folder. The folder name is prefixed by [yourQuizName] : `pushkin/[yourQuizName]-worker`. You could edit `index.py` within that folder.
 
 # Extension
 I am not a python expert, any refactoring on this would be much appreciated.
